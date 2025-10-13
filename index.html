@@ -6,20 +6,31 @@
     <title>Language Flashcard App</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
-        section { margin-bottom: 20px; }
+        nav { margin-bottom: 20px; }
+        nav button { margin-right: 10px; }
+        section { display: none; margin-bottom: 20px; }
+        section.active { display: block; }
         button { margin-right: 10px; }
         ul { list-style: none; padding: 0; }
         li { margin-bottom: 10px; border: 1px solid #ddd; padding: 10px; }
-        .group-item { cursor: move; }
+        .group-item { cursor: move; touch-action: none; } /* For better touch */
         .flashcard { border: 1px solid #000; padding: 20px; text-align: center; min-height: 200px; }
         .front, .back { display: none; }
         .active { display: block; }
         audio, video { margin: 10px 0; }
         img { max-width: 100%; height: auto; }
+        #group-datalist { position: absolute; background: white; border: 1px solid #ddd; max-height: 150px; overflow-y: auto; }
     </style>
 </head>
 <body>
     <h1>Language Flashcard App</h1>
+
+    <nav>
+        <button onclick="showSection('import-section')">Load JSON</button>
+        <button onclick="showSection('items-section')">Associate Images & Groups</button>
+        <button onclick="showSection('groups-section')">Manage Groups & Order</button>
+        <button onclick="showSection('learning-section')">Train</button>
+    </nav>
 
     <section id="import-section">
         <h2>Import JSON Data</h2>
@@ -28,14 +39,12 @@
     </section>
 
     <section id="items-section">
-        <h2>All Items</h2>
+        <h2>All Items - Associate Images & Add to Groups</h2>
         <ul id="all-items"></ul>
     </section>
 
     <section id="groups-section">
-        <h2>Groups</h2>
-        <input type="text" id="new-group-name" placeholder="New group name">
-        <button onclick="createGroup()">Create Group</button>
+        <h2>Manage Groups</h2>
         <div id="groups-container"></div>
     </section>
 
@@ -83,6 +92,15 @@
             localStorage.setItem(storageKey, JSON.stringify({ items: allItems, groups }));
         }
 
+        // Show specific section
+        function showSection(id) {
+            document.querySelectorAll('section').forEach(sec => sec.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            if (id === 'groups-section') renderGroups();
+            if (id === 'items-section') renderAllItems();
+            if (id === 'learning-section') populateGroupSelect();
+        }
+
         // Import JSON data
         function importData() {
             const jsonInput = document.getElementById('json-input').value;
@@ -109,13 +127,28 @@
                 li.textContent = `${item.source_value} - ${item.target_value}`;
                 li.dataset.id = item.learnable_id;
 
-                // Add to group button
+                // Add to group input with autocomplete
+                const groupInput = document.createElement('input');
+                groupInput.type = 'text';
+                groupInput.placeholder = 'Group name (autocomplete)';
+                groupInput.setAttribute('list', 'group-datalist');
+                li.appendChild(groupInput);
+
                 const addBtn = document.createElement('button');
-                addBtn.textContent = 'Add to Group';
-                addBtn.onclick = () => addToGroupPrompt(item.learnable_id);
+                addBtn.textContent = 'Add/Create Group';
+                addBtn.onclick = () => addToGroup(item.learnable_id, groupInput.value.trim());
                 li.appendChild(addBtn);
 
-                // Upload image button
+                // Datalist for autocomplete
+                let datalist = document.getElementById('group-datalist');
+                if (!datalist) {
+                    datalist = document.createElement('datalist');
+                    datalist.id = 'group-datalist';
+                    document.body.appendChild(datalist);
+                }
+                datalist.innerHTML = Object.keys(groups).map(name => `<option value="${name}">`).join('');
+
+                // Upload image
                 const uploadInput = document.createElement('input');
                 uploadInput.type = 'file';
                 uploadInput.accept = 'image/*';
@@ -126,17 +159,20 @@
             });
         }
 
-        // Prompt to add to group
-        function addToGroupPrompt(id) {
-            const groupName = prompt('Enter group name to add to:');
-            if (groupName && groups[groupName]) {
-                if (!groups[groupName].includes(id)) {
-                    groups[groupName].push(id);
-                    renderGroups();
-                    saveData();
-                }
+        // Add to group, create if not exists
+        function addToGroup(id, groupName) {
+            if (!groupName) return alert('Enter a group name!');
+            if (!groups[groupName]) {
+                groups[groupName] = [];
+            }
+            if (!groups[groupName].includes(id)) {
+                groups[groupName].push(id);
+                renderGroups();
+                populateGroupSelect();
+                saveData();
+                alert(`Added to ${groupName}!`);
             } else {
-                alert('Group not found!');
+                alert('Already in group!');
             }
         }
 
@@ -150,17 +186,6 @@
                 alert('Image uploaded!');
             };
             reader.readAsDataURL(file);
-        }
-
-        // Create new group
-        function createGroup() {
-            const name = document.getElementById('new-group-name').value.trim();
-            if (name && !groups[name]) {
-                groups[name] = [];
-                renderGroups();
-                saveData();
-                populateGroupSelect();
-            }
         }
 
         // Render groups
@@ -181,13 +206,14 @@
                         li.textContent = `${item.source_value} - ${item.target_value}`;
                         li.dataset.id = id;
                         li.classList.add('group-item');
+                        li.draggable = true; // Ensure draggable
                         ul.appendChild(li);
                     }
                 });
 
                 div.appendChild(ul);
 
-                // Remove group button
+                // Delete group button
                 const delBtn = document.createElement('button');
                 delBtn.textContent = 'Delete Group';
                 delBtn.onclick = () => {
@@ -200,32 +226,67 @@
 
                 container.appendChild(div);
 
-                // Make sortable for ordering
+                // Make sortable
                 makeSortable(ul, name);
             });
         }
 
-        // Make list sortable
+        // Make list sortable with touch support
         function makeSortable(ul, groupName) {
+            let draggedItem = null;
+
             ul.addEventListener('dragstart', (e) => {
-                e.dataTransfer.setData('text/plain', e.target.dataset.id);
+                draggedItem = e.target.closest('li');
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', draggedItem.dataset.id);
             });
-            ul.addEventListener('dragover', (e) => e.preventDefault());
-            ul.addEventListener('drop', (e) => {
+
+            ul.addEventListener('dragover', (e) => {
                 e.preventDefault();
-                const id = e.dataTransfer.getData('text/plain');
                 const target = e.target.closest('li');
-                if (target && target.dataset.id !== id) {
-                    const fromIndex = groups[groupName].indexOf(Number(id));
-                    const toIndex = groups[groupName].indexOf(Number(target.dataset.id));
-                    if (fromIndex !== -1 && toIndex !== -1) {
-                        const [moved] = groups[groupName].splice(fromIndex, 1);
-                        groups[groupName].splice(toIndex, 0, moved);
-                        renderGroups();
-                        saveData();
-                    }
+                if (target && target !== draggedItem) {
+                    const rect = target.getBoundingClientRect();
+                    const next = (e.clientY - rect.top) / rect.height > 0.5;
+                    ul.insertBefore(draggedItem, next && target.nextSibling || target);
                 }
             });
+
+            ul.addEventListener('dragend', () => {
+                updateGroupOrder(ul, groupName);
+                draggedItem = null;
+            });
+
+            // Touch support
+            ul.addEventListener('touchstart', (e) => {
+                draggedItem = e.target.closest('li');
+                draggedItem.style.opacity = '0.5';
+            });
+
+            ul.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                const touch = e.touches[0];
+                const target = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('li');
+                if (target && target !== draggedItem) {
+                    const rect = target.getBoundingClientRect();
+                    const next = (touch.clientY - rect.top) / rect.height > 0.5;
+                    ul.insertBefore(draggedItem, next && target.nextSibling || target);
+                }
+            });
+
+            ul.addEventListener('touchend', () => {
+                if (draggedItem) {
+                    draggedItem.style.opacity = '1';
+                    updateGroupOrder(ul, groupName);
+                    draggedItem = null;
+                }
+            });
+        }
+
+        // Update group order after drag
+        function updateGroupOrder(ul, groupName) {
+            const newOrder = Array.from(ul.querySelectorAll('li')).map(li => Number(li.dataset.id));
+            groups[groupName] = newOrder;
+            saveData();
         }
 
         // Populate group select for learning
@@ -281,6 +342,7 @@
             const back = document.querySelector('.back');
 
             // Front based on mode
+            front.innerHTML = '';
             if (currentSession.mode === 'image' && item.image) {
                 front.innerHTML = `<img src="${item.image}" alt="Image">`;
             } else if (currentSession.mode === 'chinese') {
@@ -288,7 +350,7 @@
             } else if (currentSession.mode === 'pinyin') {
                 front.textContent = item.romanization;
             } else {
-                front.textContent = 'No image available'; // Fallback
+                front.textContent = 'No content available';
             }
 
             // Back with all info
@@ -336,6 +398,7 @@
 
         // Initial load
         loadData();
+        showSection('import-section'); // Default to first section
     </script>
 </body>
 </html>
