@@ -240,7 +240,7 @@
             if (item.image) {
                 if (!confirm('Image already exists. Overwrite?')) return;
             }
-            const prompt = encodeURIComponent(`Make an image that makes it easy to think of the following word: ${item.source_value}`);
+            const prompt = encodeURIComponent(`Create a vivid, exaggerated, memorable mnemonic illustration in cartoon style for the vocabulary word "${item.source_value}", associating its sound or spelling with its meaning in a weird and wacky way, without any text, letters, or words in the image`);
             const url = `${aiImageApiUrl}${prompt}`;
             try {
                 showMessage('Generating image...');
