@@ -20,6 +20,7 @@
         audio, video { margin: 10px 0; }
         img { max-width: 100%; height: auto; }
         #group-datalist { position: absolute; background: white; border: 1px solid #ddd; max-height: 150px; overflow-y: auto; }
+        #message-banner { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: green; color: white; padding: 10px; border-radius: 5px; display: none; z-index: 1000; }
     </style>
 </head>
 <body>
@@ -36,6 +37,9 @@
         <h2>Import JSON Data</h2>
         <textarea id="json-input" rows="10" cols="50" placeholder="Paste your JSON array here..."></textarea>
         <button onclick="importData()">Import</button>
+        <h2>Export Data</h2>
+        <button onclick="exportData()">Export to Clipboard</button>
+        <textarea id="export-output" rows="10" cols="50" readonly></textarea>
     </section>
 
     <section id="items-section">
@@ -69,6 +73,8 @@
         <div id="session-result" style="display: none;"></div>
     </section>
 
+    <div id="message-banner"></div>
+
     <script>
         let allItems = [];
         let groups = {};
@@ -101,21 +107,51 @@
             if (id === 'learning-section') populateGroupSelect();
         }
 
-        // Import JSON data
+        // Import JSON data (append or update)
         function importData() {
             const jsonInput = document.getElementById('json-input').value;
             try {
                 const imported = JSON.parse(jsonInput);
-                allItems = imported.map(item => ({
-                    ...item,
-                    image: null // Placeholder for user-uploaded image
-                }));
+                const idMap = new Map(allItems.map(item => [item.learnable_id, item]));
+                imported.forEach(newItem => {
+                    const existing = idMap.get(newItem.learnable_id);
+                    if (existing) {
+                        // Update existing item
+                        Object.assign(existing, newItem);
+                        existing.image = existing.image || null; // Preserve image if not in import
+                    } else {
+                        // Append new item
+                        allItems.push({ ...newItem, image: null });
+                    }
+                });
                 renderAllItems();
                 saveData();
-                alert('Data imported successfully!');
+                showMessage('Data imported successfully (appended/updated)!');
             } catch (e) {
-                alert('Invalid JSON!');
+                showMessage('Invalid JSON!', 'red');
             }
+        }
+
+        // Export data to clipboard and textarea
+        function exportData() {
+            const data = JSON.stringify({ items: allItems, groups }, null, 2);
+            document.getElementById('export-output').value = data;
+            navigator.clipboard.writeText(data).then(() => {
+                showMessage('Data exported to clipboard!');
+            }).catch(() => {
+                showMessage('Failed to copy to clipboard. Use the textarea.', 'red');
+            });
+        }
+
+        // Show vanishing message banner
+        function showMessage(text, color = 'green') {
+            const banner = document.getElementById('message-banner');
+            banner.textContent = text;
+            banner.style.background = color;
+            banner.style.display = 'block';
+            setTimeout(() => {
+                banner.style.display = 'none';
+            }, 3000);
         }
 
         // Render all items list
@@ -139,15 +175,6 @@
                 addBtn.onclick = () => addToGroup(item.learnable_id, groupInput.value.trim());
                 li.appendChild(addBtn);
 
-                // Datalist for autocomplete
-                let datalist = document.getElementById('group-datalist');
-                if (!datalist) {
-                    datalist = document.createElement('datalist');
-                    datalist.id = 'group-datalist';
-                    document.body.appendChild(datalist);
-                }
-                datalist.innerHTML = Object.keys(groups).map(name => `<option value="${name}">`).join('');
-
                 // Upload image
                 const uploadInput = document.createElement('input');
                 uploadInput.type = 'file';
@@ -157,22 +184,36 @@
 
                 ul.appendChild(li);
             });
+            updateDatalist();
+        }
+
+        // Update datalist with current groups
+        function updateDatalist() {
+            let datalist = document.getElementById('group-datalist');
+            if (!datalist) {
+                datalist = document.createElement('datalist');
+                datalist.id = 'group-datalist';
+                document.body.appendChild(datalist);
+            }
+            datalist.innerHTML = Object.keys(groups).map(name => `<option value="${name}">`).join('');
         }
 
         // Add to group, create if not exists
         function addToGroup(id, groupName) {
-            if (!groupName) return alert('Enter a group name!');
-            if (!groups[groupName]) {
+            if (!groupName) return showMessage('Enter a group name!', 'red');
+            const isNew = !groups[groupName];
+            if (isNew) {
                 groups[groupName] = [];
             }
             if (!groups[groupName].includes(id)) {
                 groups[groupName].push(id);
                 renderGroups();
                 populateGroupSelect();
+                if (isNew) updateDatalist(); // Update autocomplete for new group
                 saveData();
-                alert(`Added to ${groupName}!`);
+                showMessage(`Added to ${groupName}!`);
             } else {
-                alert('Already in group!');
+                showMessage('Already in group!');
             }
         }
 
@@ -183,7 +224,7 @@
                 const item = allItems.find(i => i.learnable_id === id);
                 item.image = e.target.result; // Data URL
                 saveData();
-                alert('Image uploaded!');
+                showMessage('Image uploaded!');
             };
             reader.readAsDataURL(file);
         }
@@ -220,6 +261,7 @@
                     delete groups[name];
                     renderGroups();
                     populateGroupSelect();
+                    updateDatalist();
                     saveData();
                 };
                 div.appendChild(delBtn);
@@ -314,7 +356,7 @@
         function startSession() {
             const groupName = document.getElementById('group-select').value;
             const mode = document.getElementById('mode-select').value;
-            if (!groupName || !groups[groupName].length) return alert('No group selected or empty!');
+            if (!groupName || !groups[groupName].length) return showMessage('No group selected or empty!', 'red');
 
             currentSession.items = groups[groupName].map(id => allItems.find(i => i.learnable_id === id));
             currentSession.mode = mode;
@@ -380,13 +422,13 @@
         }
 
         function markCorrect() {
-            if (!currentSession.flipped) return alert('Flip first!');
+            if (!currentSession.flipped) return showMessage('Flip first!', 'red');
             currentSession.correct++;
             nextCard();
         }
 
         function markIncorrect() {
-            if (!currentSession.flipped) return alert('Flip first!');
+            if (!currentSession.flipped) return showMessage('Flip first!', 'red');
             nextCard();
         }
 
