@@ -44,6 +44,7 @@
 
     <section id="items-section">
         <h2>All Items - Associate Images & Add to Groups</h2>
+        <button onclick="generateAllMissingImages()">Generate AI Images for All Missing</button>
         <ul id="all-items"></ul>
     </section>
 
@@ -79,6 +80,7 @@
         let allItems = [];
         let groups = {};
         const storageKey = 'flashcardAppData';
+        const aiImageApiUrl = 'https://image.pollinations.ai/prompt/';
 
         // Load saved data from localStorage
         function loadData() {
@@ -175,12 +177,26 @@
                 addBtn.onclick = () => addToGroup(item.learnable_id, groupInput.value.trim());
                 li.appendChild(addBtn);
 
+                // Generate AI Image button
+                const genBtn = document.createElement('button');
+                genBtn.textContent = 'Generate AI Image';
+                genBtn.onclick = () => generateAIImage(item.learnable_id);
+                li.appendChild(genBtn);
+
                 // Upload image
                 const uploadInput = document.createElement('input');
                 uploadInput.type = 'file';
                 uploadInput.accept = 'image/*';
                 uploadInput.onchange = (e) => uploadImage(item.learnable_id, e.target.files[0]);
                 li.appendChild(uploadInput);
+
+                // Preview if image exists
+                if (item.image) {
+                    const preview = document.createElement('img');
+                    preview.src = item.image;
+                    preview.style.maxWidth = '100px';
+                    li.appendChild(preview);
+                }
 
                 ul.appendChild(li);
             });
@@ -217,6 +233,45 @@
             }
         }
 
+        // Generate AI Image using Pollinations.ai
+        async function generateAIImage(id) {
+            const item = allItems.find(i => i.learnable_id === id);
+            if (!item) return;
+            if (item.image) {
+                if (!confirm('Image already exists. Overwrite?')) return;
+            }
+            const prompt = encodeURIComponent(`Simple cartoon illustration of "${item.source_value}" in Chinese: ${item.target_value} (${item.romanization})`);
+            const url = `${aiImageApiUrl}${prompt}`;
+            try {
+                showMessage('Generating image...');
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('API error');
+                const blob = await response.blob();
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    item.image = e.target.result;
+                    saveData();
+                    renderAllItems();
+                    showMessage('AI Image generated!');
+                };
+                reader.readAsDataURL(blob);
+            } catch (e) {
+                showMessage('Failed to generate image: ' + e.message, 'red');
+            }
+        }
+
+        // Generate AI Images for all missing
+        async function generateAllMissingImages() {
+            const missing = allItems.filter(item => !item.image);
+            if (missing.length === 0) return showMessage('All items have images!');
+            if (!confirm(`Generate for ${missing.length} items? This may take time.`)) return;
+            for (const item of missing) {
+                await generateAIImage(item.learnable_id);
+                await new Promise(resolve => setTimeout(resolve, 1000)); // 1s delay to avoid rate limits
+            }
+            showMessage('All missing images generated!');
+        }
+
         // Upload image for item
         function uploadImage(id, file) {
             const reader = new FileReader();
@@ -224,6 +279,7 @@
                 const item = allItems.find(i => i.learnable_id === id);
                 item.image = e.target.result; // Data URL
                 saveData();
+                renderAllItems();
                 showMessage('Image uploaded!');
             };
             reader.readAsDataURL(file);
