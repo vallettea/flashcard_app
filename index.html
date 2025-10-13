@@ -240,7 +240,7 @@
             if (item.image) {
                 if (!confirm('Image already exists. Overwrite?')) return;
             }
-            const prompt = encodeURIComponent(`Simple cartoon illustration of "${item.source_value}" in Chinese: ${item.target_value} (${item.romanization})`);
+            const prompt = encodeURIComponent(`Simple cartoon illustration of "${item.source_value}"`);
             const url = `${aiImageApiUrl}${prompt}`;
             try {
                 showMessage('Generating image...');
