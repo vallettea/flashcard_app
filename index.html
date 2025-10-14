@@ -79,14 +79,15 @@
             <option value="chinese">Chinese Characters</option>
             <option value="pinyin">Pinyin</option>
         </select>
+        <label><input type="checkbox" id="shuffle-check"> Shuffle cards</label>
         <button onclick="startSession()">Start Session</button>
         <div id="flashcard-container" style="display: none;">
+            <button onclick="markCorrect()">Correct</button>
+            <button onclick="markIncorrect()">Incorrect</button>
             <div class="flashcard" onclick="flipCard()">
                 <div class="front active"></div>
                 <div class="back"></div>
             </div>
-            <button onclick="markCorrect()">Correct</button>
-            <button onclick="markIncorrect()">Incorrect</button>
             <p id="progress"></p>
         </div>
         <div id="session-result" style="display: none;"></div>
@@ -508,12 +509,23 @@
             flipped: false
         };
 
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
         function startSession() {
             const groupName = document.getElementById('group-select').value;
             const mode = document.getElementById('mode-select').value;
+            const shuffle = document.getElementById('shuffle-check').checked;
             if (!groupName || !groups[groupName].length) return showMessage('No group selected or empty!', 'red');
 
             currentSession.items = groups[groupName].map(id => allItems.find(i => i.learnable_id === id));
+            if (shuffle) {
+                shuffleArray(currentSession.items);
+            }
             currentSession.mode = mode;
             currentSession.index = 0;
             currentSession.correct = 0;
@@ -566,7 +578,9 @@
             back.classList.remove('active');
             currentSession.flipped = false;
 
-            document.getElementById('progress').textContent = `Card ${currentSession.index + 1}/${currentSession.total}`;
+            const done = currentSession.index;
+            const percent = done > 0 ? (currentSession.correct / done) * 100 : 0;
+            document.getElementById('progress').textContent = `Card ${currentSession.index + 1}/${currentSession.total} (${percent.toFixed(0)}% correct)`;
         }
 
         function flipCard() {
