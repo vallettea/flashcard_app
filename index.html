@@ -128,28 +128,56 @@
             if (id === 'learning-section') populateGroupSelect();
         }
 
-        // Import JSON data (append or update)
+        // Import JSON data (handle both array and full object)
         function importData() {
             const jsonInput = document.getElementById('json-input').value;
             try {
-                const imported = JSON.parse(jsonInput);
-                const idMap = new Map(allItems.map(item => [item.learnable_id, item]));
-                imported.forEach(newItem => {
-                    const existing = idMap.get(newItem.learnable_id);
-                    if (existing) {
-                        // Update existing item
-                        Object.assign(existing, newItem);
-                        existing.image = existing.image || null; // Preserve image if not in import
-                    } else {
-                        // Append new item
-                        allItems.push({ ...newItem, image: null });
-                    }
-                });
+                const parsed = JSON.parse(jsonInput);
+                if (Array.isArray(parsed)) {
+                    // Original Memrise format: array of items
+                    const idMap = new Map(allItems.map(item => [item.learnable_id, item]));
+                    parsed.forEach(newItem => {
+                        const existing = idMap.get(newItem.learnable_id);
+                        if (existing) {
+                            Object.assign(existing, newItem);
+                            existing.image = existing.image || null;
+                        } else {
+                            allItems.push({ ...newItem, image: null });
+                        }
+                    });
+                } else if (parsed.items && parsed.groups) {
+                    // Full exported format
+                    const idMap = new Map(allItems.map(item => [item.learnable_id, item]));
+                    parsed.items.forEach(newItem => {
+                        const existing = idMap.get(newItem.learnable_id);
+                        if (existing) {
+                            Object.assign(existing, newItem);
+                        } else {
+                            allItems.push(newItem);
+                        }
+                    });
+                    // Merge groups
+                    Object.keys(parsed.groups).forEach(groupName => {
+                        if (!groups[groupName]) {
+                            groups[groupName] = [];
+                        }
+                        parsed.groups[groupName].forEach(id => {
+                            if (!groups[groupName].includes(id)) {
+                                groups[groupName].push(id);
+                            }
+                        });
+                    });
+                } else {
+                    throw new Error('Invalid format');
+                }
                 renderAllItems();
+                renderGroups();
+                populateGroupSelect();
+                updateDatalist();
                 saveData();
-                showMessage('Data imported successfully (appended/updated)!');
+                showMessage('Data imported successfully!');
             } catch (e) {
-                showMessage('Invalid JSON!', 'red');
+                showMessage('Invalid JSON or format! ' + e.message, 'red');
             }
         }
 
