@@ -26,6 +26,9 @@
         #group-datalist { position: absolute; background: white; border: 1px solid #ddd; max-height: 150px; overflow-y: auto; }
         #message-banner { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: green; color: white; padding: 10px; border-radius: 5px; display: none; z-index: 1000; }
         #search-input { margin-bottom: 10px; width: 100%; max-width: 400px; }
+        .alphabetical-item { cursor: pointer; }
+        .expanded-details { display: none; margin-top: 10px; border-top: 1px solid #ccc; padding-top: 10px; }
+        .expanded .expanded-details { display: block; }
         @media (max-width: 600px) {
             li { flex-direction: column; align-items: flex-start; }
         }
@@ -227,19 +230,48 @@
             sortedItems.forEach(item => {
                 if (filter && !item.source_value.toLowerCase().includes(filter.toLowerCase())) return;
                 const li = document.createElement('li');
-                li.textContent = `${item.source_value} - ${item.target_value} (${item.romanization})`;
+                li.classList.add('alphabetical-item');
+                const summary = document.createElement('div');
+                summary.textContent = `${item.source_value} - ${item.target_value} (${item.romanization})`;
+                li.appendChild(summary);
+
+                const details = document.createElement('div');
+                details.classList.add('expanded-details');
+                details.innerHTML = `
+                    <p><strong>Chinese:</strong> ${item.target_value}</p>
+                    <p><strong>Pinyin:</strong> ${item.romanization}</p>
+                    <p><strong>English:</strong> ${item.source_value}</p>
+                    <p><strong>Literal:</strong> ${item.literal_translation || 'N/A'}</p>
+                `;
                 if (item.image) {
                     const img = document.createElement('img');
                     img.src = item.image;
-                    img.style.maxWidth = '50px';
-                    li.appendChild(img);
+                    img.style.maxWidth = '200px';
+                    details.appendChild(img);
                 }
+                // Prioritize audio, then video, only one
+                if (item.audio_urls.length > 0) {
+                    const audio = document.createElement('audio');
+                    audio.controls = true;
+                    audio.src = item.audio_urls[0];
+                    details.appendChild(audio);
+                } else if (item.video_urls.length > 0) {
+                    const video = document.createElement('video');
+                    video.controls = true;
+                    video.width = 200;
+                    video.src = item.video_urls[0];
+                    details.appendChild(video);
+                }
+                li.appendChild(details);
+
+                li.onclick = () => li.classList.toggle('expanded');
+
                 ul.appendChild(li);
             });
         }
 
         // Search input handler
-        document.getElementById('search-input').addEventListener('input', (e) => renderAlphabeticalList(e.target.value));
+        document.getElementById('search-input')?.addEventListener('input', (e) => renderAlphabeticalList(e.target.value));
 
         // Update datalist with current groups
         function updateDatalist() {
