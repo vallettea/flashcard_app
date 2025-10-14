@@ -12,7 +12,11 @@
         section.active { display: block; }
         button { margin-right: 10px; }
         ul { list-style: none; padding: 0; }
-        li { margin-bottom: 10px; border: 1px solid #ddd; padding: 10px; }
+        li { margin-bottom: 10px; border: 1px solid #ddd; padding: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+        li > * { flex: 1 1 auto; }
+        li input[type="text"] { flex: 1 1 150px; }
+        li input[type="file"] { flex: 0 1 auto; }
+        li img { max-width: 100px; flex: 0 1 auto; }
         .group-item { cursor: move; touch-action: none; } /* For better touch */
         .flashcard { border: 1px solid #000; padding: 20px; text-align: center; min-height: 200px; }
         .front, .back { display: none; }
@@ -21,6 +25,10 @@
         img { max-width: 100%; height: auto; }
         #group-datalist { position: absolute; background: white; border: 1px solid #ddd; max-height: 150px; overflow-y: auto; }
         #message-banner { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: green; color: white; padding: 10px; border-radius: 5px; display: none; z-index: 1000; }
+        #search-input { margin-bottom: 10px; width: 100%; max-width: 400px; }
+        @media (max-width: 600px) {
+            li { flex-direction: column; align-items: flex-start; }
+        }
     </style>
 </head>
 <body>
@@ -30,6 +38,7 @@
         <button onclick="showSection('import-section')">Load JSON</button>
         <button onclick="showSection('items-section')">Associate Images & Groups</button>
         <button onclick="showSection('groups-section')">Manage Groups & Order</button>
+        <button onclick="showSection('alphabetical-section')">All Words Alphabetical</button>
         <button onclick="showSection('learning-section')">Train</button>
     </nav>
 
@@ -51,6 +60,12 @@
     <section id="groups-section">
         <h2>Manage Groups</h2>
         <div id="groups-container"></div>
+    </section>
+
+    <section id="alphabetical-section">
+        <h2>All Words (Alphabetical by English)</h2>
+        <input type="text" id="search-input" placeholder="Search by English...">
+        <ul id="alphabetical-list"></ul>
     </section>
 
     <section id="learning-section">
@@ -106,6 +121,7 @@
             document.getElementById(id).classList.add('active');
             if (id === 'groups-section') renderGroups();
             if (id === 'items-section') renderAllItems();
+            if (id === 'alphabetical-section') renderAlphabeticalList();
             if (id === 'learning-section') populateGroupSelect();
         }
 
@@ -202,6 +218,28 @@
             });
             updateDatalist();
         }
+
+        // Render alphabetical list
+        function renderAlphabeticalList(filter = '') {
+            const ul = document.getElementById('alphabetical-list');
+            ul.innerHTML = '';
+            const sortedItems = [...allItems].sort((a, b) => a.source_value.localeCompare(b.source_value));
+            sortedItems.forEach(item => {
+                if (filter && !item.source_value.toLowerCase().includes(filter.toLowerCase())) return;
+                const li = document.createElement('li');
+                li.textContent = `${item.source_value} - ${item.target_value} (${item.romanization})`;
+                if (item.image) {
+                    const img = document.createElement('img');
+                    img.src = item.image;
+                    img.style.maxWidth = '50px';
+                    li.appendChild(img);
+                }
+                ul.appendChild(li);
+            });
+        }
+
+        // Search input handler
+        document.getElementById('search-input').addEventListener('input', (e) => renderAlphabeticalList(e.target.value));
 
         // Update datalist with current groups
         function updateDatalist() {
